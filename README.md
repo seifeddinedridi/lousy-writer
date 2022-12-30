@@ -10,6 +10,11 @@ The model can be trained on any sort of text: novel, source code, poetry, etc. F
 pip install -r requirements.txt
 ```
 
+Create the directory where the model state will be persisted:
+```bash
+mkdir pretrained_model
+```
+
 ## Training the model
 
 The model state is saved in the `pretrained_model` folder every time it performs better against the validation dataset. The format of the checkpoint' filename is: `rnn_{epoch}.pt`.
