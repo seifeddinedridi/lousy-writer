@@ -15,13 +15,13 @@ pip install -r requirements.txt
 Checkpoint files are saved every 15 minutes or during the last iteration of the training epoch in the `pretrained_model` folder.
 
 ```bash
-python text_generator.py --train --training-epoch 10000
+python text_generator.py --train --max-epoch 10000
 ```
 
 ## Generate text the model
 
 ```bash
-python text_generator.py --eval --epoch 10000
+python text_generator.py --eval --from-epoch 10000
 ```
 
 The quality of the generated text has still room for improvements, this is probably related to the slow decrease in the loss function below the 1.0 mark. Also the lost is still quite high (~1.9) when the model is run against the testing dataset.
