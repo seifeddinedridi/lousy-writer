@@ -12,7 +12,7 @@ pip install -r requirements.txt
 
 ## Training the model
 
-Checkpoint files are saved every 15 minutes or during the last iteration of the training epoch in the `pretrained_model` folder.
+The model state is saved the `pretrained_model` folder every time it performs better against the validation dataset. The checkpoint filename has the format: `rnn_{epoch}.pt`.
 
 ```bash
 python text_generator.py --train --max-epoch 10000
