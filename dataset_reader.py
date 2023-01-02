@@ -45,17 +45,18 @@ class CharacterDataset(Dataset):
 
     def __getitem__(self, idx):
         batch = self.sentences[idx]
-        in_tensor = self.to_tensor(batch[:-1])
-        target = self.to_tensor(batch[1:], -1.0)
+        in_tensor = self.to_tensor(batch, starting_index=1)
+        target = self.to_tensor(batch, -1.0, 0)
         return in_tensor, target
 
     def __len__(self):
         return len(self.sentences)
 
-    def to_tensor(self, chars, padding_value=0.0):
-        tensor = torch.zeros(self.sequence_length, dtype=torch.long)
-        tensor[0:len(chars)] = torch.tensor([self.ctoi[c] for c in chars])
-        tensor[len(chars):] = padding_value
+    def to_tensor(self, chars, padding_value=0.0, starting_index=0):
+        tensor = torch.zeros(self.sequence_length + 1, dtype=torch.long)
+        tensor[0:starting_index] = padding_value
+        tensor[starting_index:len(chars) + starting_index] = torch.tensor([self.ctoi[c] for c in chars])
+        tensor[len(chars) + starting_index:] = padding_value
         return tensor
 
     def to_chars(self, tensor):

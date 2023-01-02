@@ -123,7 +123,7 @@ def main():
     training_dataset, testing_dataset = DatasetReader.read('data/tinyshakespeare.txt', sequence_length=100,
                                                            training_data_split=0.7)
     config = ModelConfig(in_features=len(training_dataset.chars) + 1, out_features=len(training_dataset.chars) + 1,
-                         hidden_size=1024, layers_count=2, cell_type='lstm')
+                         hidden_size=512, layers_count=2, cell_type='lstm')
     model = MultiLayerRNN(config)
     print(f'Number of parameters in the model: {sum(p.numel() for p in model.parameters() if p.requires_grad)}')
     if args.train:

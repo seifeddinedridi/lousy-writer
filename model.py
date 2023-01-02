@@ -77,7 +77,7 @@ class LSTM(nn.Module):
 class PyTorchRNN(nn.Module):
     def __init__(self, config: ModelConfig):
         super(PyTorchRNN, self).__init__()
-        self.embedding = nn.Embedding(config.in_features, config.embedding_dim)
+        self.embedding = nn.Embedding(config.in_features, config.embedding_dim, padding_idx=0)
         if config.cell_type == 'rnn':
             self.rnn = nn.RNN(config.embedding_dim, config.hidden_size, num_layers=config.layers_count, batch_first=True)
         elif config.cell_type == 'lstm':
@@ -106,7 +106,7 @@ class MultiLayerRNN(nn.Module):
                  range(config.layers_count)])
         else:
             raise TypeError('Unsupported cell type')
-        self.embedding = nn.Embedding(config.in_features, config.embedding_dim)
+        self.embedding = nn.Embedding(config.in_features, config.embedding_dim, padding_idx=0)
         self.head = nn.Linear(config.hidden_size, config.out_features)
         self.dropout = nn.Dropout(config.dropout_factor)
 
