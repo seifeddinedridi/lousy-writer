@@ -15,23 +15,27 @@ class DatasetReader:
         start_index = 0
         sentences = []
         while start_index < len(data):
-            end_index = min(len(data), start_index + sequence_length)
-            sentences.append(data[start_index:end_index])
-            start_index = end_index
+            test_dataset_size = min(len(data), start_index + sequence_length)
+            sentences.append(data[start_index:test_dataset_size])
+            start_index = test_dataset_size
         chars = sorted(list(set(''.join(data))))  # all the possible characters
         ctoi = {c: index + 1 for index, c in enumerate(chars)}
         itoc = {index + 1: c for index, c in enumerate(chars)}
         print(f"Number of examples in the dataset: {len(sentences)}")
-        end_index = math.floor(len(sentences) * training_data_split)
-        print(f"Number of examples in the training dataset: {end_index}")
-        print(f"Number of examples in the testing dataset: {len(sentences) - end_index}")
+        permuted_indices = torch.randperm(len(sentences))
+        # partition the input with a minimum threshold for the number of test samples
+        test_dataset_size = min(500, int(len(sentences) * training_data_split))
+        train_sentences = [sentences[i] for i in permuted_indices[:-test_dataset_size]]
+        test_sentences = [sentences[i] for i in permuted_indices[-test_dataset_size:]]
+        print(f"Number of examples in the training dataset: {len(sentences) - test_dataset_size}")
+        print(f"Number of examples in the testing dataset: {test_dataset_size}")
         print(f"Sequence length: {sequence_length}")
         print(f"Number of unique characters in the vocabulary: {len(chars)}")
         print("Vocabulary:")
         print(''.join(chars))
         # Create training and test dataset
-        return CharacterDataset(chars, sentences[0:end_index], ctoi, itoc, sequence_length), \
-            CharacterDataset(chars, sentences[end_index: len(sentences)], ctoi, itoc, sequence_length)
+        return CharacterDataset(chars, train_sentences, ctoi, itoc, sequence_length), \
+            CharacterDataset(chars, test_sentences, ctoi, itoc, sequence_length)
 
 
 class CharacterDataset(Dataset):
@@ -46,7 +50,7 @@ class CharacterDataset(Dataset):
     def __getitem__(self, idx):
         batch = self.sentences[idx]
         in_tensor = self.to_tensor(batch, starting_index=1)
-        target = self.to_tensor(batch, -1.0, 0)
+        target = self.to_tensor(batch, -1.0)
         return in_tensor, target
 
     def __len__(self):

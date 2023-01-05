@@ -8,10 +8,9 @@ from torch import nn
 class ModelConfig:
     in_features: int
     out_features: int
-    embedding_dim: int = 64
-    hidden_size: int = 256
+    embedding_dim: int = 256
+    hidden_size: int = 1024
     layers_count: int = 1
-    dropout_factor: float = 0.2
     cell_type: str = 'rnn'
 
 
@@ -77,11 +76,13 @@ class LSTM(nn.Module):
 class PyTorchRNN(nn.Module):
     def __init__(self, config: ModelConfig):
         super(PyTorchRNN, self).__init__()
-        self.embedding = nn.Embedding(config.in_features, config.embedding_dim, padding_idx=0)
+        self.embedding = nn.Embedding(config.in_features, config.embedding_dim)
         if config.cell_type == 'rnn':
             self.rnn = nn.RNN(config.embedding_dim, config.hidden_size, num_layers=config.layers_count, batch_first=True)
         elif config.cell_type == 'lstm':
             self.rnn = nn.LSTM(config.embedding_dim, config.hidden_size, num_layers=config.layers_count, batch_first=True)
+        elif config.cell_type == 'gru':
+            self.rnn = nn.GRU(config.embedding_dim, config.hidden_size, num_layers=config.layers_count, batch_first=True)
         else:
             raise TypeError('Unsupported cell type')
         self.head = nn.Linear(config.hidden_size, config.out_features)
@@ -106,14 +107,13 @@ class MultiLayerRNN(nn.Module):
                  range(config.layers_count)])
         else:
             raise TypeError('Unsupported cell type')
-        self.embedding = nn.Embedding(config.in_features, config.embedding_dim, padding_idx=0)
+        self.embedding = nn.Embedding(config.in_features, config.embedding_dim)
         self.head = nn.Linear(config.hidden_size, config.out_features)
-        self.dropout = nn.Dropout(config.dropout_factor)
 
     def forward(self, x):
         # x has shape(batch_size, sequence_length)
         in_tensor = self.embedding(x)
         for rnn in self.rnns:
             in_tensor, _ = rnn(in_tensor)
-        in_tensor = self.dropout(self.head(in_tensor))
+        in_tensor = self.head(in_tensor)
         return in_tensor, in_tensor[:, -1]
