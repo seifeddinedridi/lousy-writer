@@ -74,7 +74,7 @@ def eval_model(model, testing_dataset, batch_size):
 @torch.no_grad()
 def generate_sample_text(model, training_dataset, text_length=1000, temperature=1.0):
     model.train(False)
-    seed_text = 'First Citizen:'
+    seed_text = 'ROMEO:'
     char_indices, cumulated_tensor = sample(model, training_dataset, seed_text, temperature)
     for idx in range(text_length):
         char_indices, out_tensor = sample(model, training_dataset, char_indices, temperature)
