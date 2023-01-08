@@ -8,7 +8,15 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, RandomSampler
 
 from dataset_reader import DatasetReader
-from model import ModelConfig, MultiLayerRNN
+from model import ModelConfig, MultiLayerRNN, PyTorchRNN
+
+
+def repackage_hidden(h):
+    """Wraps hidden states in new Tensors, to detach them from their history."""
+    if isinstance(h, torch.Tensor):
+        return h.detach()
+    else:
+        return tuple(repackage_hidden(v) for v in h)
 
 
 def train_model(model, optimizer, max_epoch, training_dataset, testing_dataset, batch_size, start_epoch=0):
@@ -17,14 +25,17 @@ def train_model(model, optimizer, max_epoch, training_dataset, testing_dataset, 
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     model.train()
-    dataset_loader = DataLoader(training_dataset, batch_size=batch_size, num_workers=0, pin_memory=True, shuffle=False)
+    dataset_loader = DataLoader(training_dataset, batch_size=batch_size, num_workers=0, pin_memory=True, drop_last=True,
+                                shuffle=False)
     dataset_iter = itertools.cycle(iter(dataset_loader))
     best_loss = float('inf')
     last_tick = time()
+    h = model.init_hidden(batch_size)
     for epoch in range(start_epoch, max_epoch):
         in_tensor, target = next(dataset_iter)
         # (batch_size, sequence_length), (batch_size, sequence_length)
-        out_tensor, _ = model(in_tensor)
+        out_tensor, h = model(in_tensor, h)
+        h = repackage_hidden(h)
         loss = F.cross_entropy(out_tensor.view(-1, out_tensor.size(-1)), target.view(-1), ignore_index=-1)
         optimizer.zero_grad()
         loss.backward()
@@ -56,13 +67,15 @@ def eval_model(model, testing_dataset, batch_size):
     model.train(False)
     torch.manual_seed(int(time()))
     dataset_loader = DataLoader(testing_dataset, sampler=RandomSampler(testing_dataset), batch_size=batch_size,
-                                shuffle=False, num_workers=0)
+                                shuffle=False, num_workers=0, drop_last=True)
     dataset_iter = itertools.cycle(iter(dataset_loader))
     average_loss = 0
     max_epoch = 10
+    h = model.init_hidden(batch_size)
     for epoch in range(max_epoch):
         in_tensor, target = next(dataset_iter)
-        out_tensor, _ = model(in_tensor)  # (batch_size, sequence_length)
+        out_tensor, h = model(in_tensor, h)  # (batch_size, sequence_length)
+        h = repackage_hidden(h)
         loss = F.cross_entropy(out_tensor.view(-1, out_tensor.size(-1)), target.view(-1), ignore_index=-1)
         average_loss += loss.item()
     average_loss /= max_epoch
@@ -74,27 +87,32 @@ def eval_model(model, testing_dataset, batch_size):
 @torch.no_grad()
 def generate_sample_text(model, training_dataset, text_length=1000, temperature=1.0):
     model.train(False)
-    seed_text = 'ROMEO:'
-    char_indices, cumulated_tensor = sample(model, training_dataset, seed_text, temperature)
+    seed_text = 'ROMEO:\n'
+    state = model.init_hidden(1)
+    char_indices, state = sample(model, state, training_dataset, seed_text, temperature)
+    cumulated_tensor = char_indices.clone()
     for idx in range(text_length):
-        char_indices, out_tensor = sample(model, training_dataset, char_indices, temperature)
-        cumulated_tensor = torch.cat((cumulated_tensor, out_tensor), dim=1)
+        char_indices, state = sample(model, state, training_dataset, training_dataset.to_chars(char_indices),
+                                     temperature)
+        cumulated_tensor = torch.cat((cumulated_tensor, char_indices), dim=0)
     model.train()
-    return training_dataset.to_chars(cumulated_tensor[0, 1:])
+    return training_dataset.to_chars(cumulated_tensor)
 
 
-def sample(model, training_dataset, text, temperature):
-    in_tensor = torch.zeros((1, len(text) + 1), dtype=torch.long)
-    in_tensor[0, 1:] = torch.tensor([training_dataset.ctoi[c] for c in text], dtype=torch.long)
-    out_tensor, _ = model(in_tensor)
-    out_tensor = out_tensor / temperature
-    v, _ = torch.topk(out_tensor, out_tensor.shape[2])
-    out_tensor[out_tensor < v[:, [-1]]] = -float('Inf')
-    probs = F.softmax(out_tensor[:, -1:, :], dim=-1)
-    char_indices = torch.multinomial(probs[0], num_samples=1)
-    # if char_indices[0, 0] == 0:
-    #     return '', char_indices[0, 1:]
-    return training_dataset.to_chars(char_indices[0]), char_indices
+def sample(model, state, training_dataset, text, temperature):
+    in_tensor = training_dataset.to_tensor(text).expand(1, -1)
+    out_tensor, h = model(in_tensor, state)
+    h = repackage_hidden(h)
+    out_tensor = out_tensor[:, -1, :] / temperature
+    # Apply masking
+    # v, _ = torch.topk(out_tensor, k=out_tensor.shape[1])
+    # out_tensor[out_tensor < v[:, -1]] = -float('Inf')
+    # Apply the softmax max
+    # probs = F.softmax(out_tensor, dim=-1)
+    probs = torch.distributions.Categorical(logits=out_tensor)
+    char_indices = probs.sample((1,))
+    # char_indices = torch.multinomial(probs, num_samples=1)
+    return char_indices, h
 
 
 def main():
@@ -132,7 +150,7 @@ def main():
         print(f'Checkpoint file {checkpoint_filepath} successfully loaded')
         model.load_state_dict(checkpoint['model_state_dict'])
         eval_model(model, testing_dataset, args.batch_size)
-        temperatures = [0.25, 0.5, 0.75, 1.0, 1.2]
+        temperatures = [1.0]
         for temperature in temperatures:
             print('-------------------------------------------------------------')
             print(generate_sample_text(model, training_dataset, 1000, temperature))

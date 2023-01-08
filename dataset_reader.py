@@ -1,4 +1,3 @@
-import math
 from dataclasses import dataclass
 
 import torch
@@ -10,15 +9,15 @@ class DatasetReader:
 
     @staticmethod
     def read(filepath, sequence_length, training_data_split=0.8):
-        with open(filepath, 'r') as f:
+        with open(filepath, 'r', encoding='utf8') as f:
             data = f.read()
         start_index = 0
         sentences = []
-        while start_index < len(data):
+        while start_index + sequence_length <= len(data):
             test_dataset_size = min(len(data), start_index + sequence_length)
             sentences.append(data[start_index:test_dataset_size])
             start_index = test_dataset_size
-        chars = sorted(list(set(''.join(data))))  # all the possible characters
+        chars = sorted(set(data))  # all the possible characters
         ctoi = {c: index + 1 for index, c in enumerate(chars)}
         itoc = {index + 1: c for index, c in enumerate(chars)}
         print(f"Number of examples in the dataset: {len(sentences)}")
@@ -49,19 +48,15 @@ class CharacterDataset(Dataset):
 
     def __getitem__(self, idx):
         batch = self.sentences[idx]
-        in_tensor = self.to_tensor(batch, starting_index=1)
-        target = self.to_tensor(batch, -1.0)
+        in_tensor = self.to_tensor(batch[:-1])
+        target = self.to_tensor(batch[1:], -1)
         return in_tensor, target
 
     def __len__(self):
         return len(self.sentences)
 
-    def to_tensor(self, chars, padding_value=0.0, starting_index=0):
-        tensor = torch.zeros(self.sequence_length + 1, dtype=torch.long)
-        tensor[0:starting_index] = padding_value
-        tensor[starting_index:len(chars) + starting_index] = torch.tensor([self.ctoi[c] for c in chars])
-        tensor[len(chars) + starting_index:] = padding_value
-        return tensor
+    def to_tensor(self, chars, padding_value=0):
+        return torch.tensor([self.ctoi[c] if idx < len(chars) else padding_value for idx, c in enumerate(chars)])
 
     def to_chars(self, tensor):
         return ''.join([self.itoc[tensor[i].item()] for i in range(tensor.shape[0])])
